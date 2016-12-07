@@ -1,0 +1,646 @@
+<html>
+    <head>
+        <title>RPS</title>
+        <script>
+/* ROCK PAPER SCISSORS */
+RPS = {};
+
+
+/*
+* Enum describing the 3 moves of RPS.
+*/
+RPS.Moves = {
+    ROCK: 1,
+    PAPER: 2,
+    SCISSORS: 3
+};
+
+
+/*
+* Generate a random move.
+*/
+RPS.randomMove = function() {
+    return Math.floor(Math.random() * 3) + 1;
+};
+
+
+/*
+* Determine the result of two moves.
+*
+* return:
+*   1 - The first player wins.
+*   0 - A tie.
+*  -1 - The second player wins
+*/
+RPS.result = function(a, b) {
+    if (a == b) { return 0; }
+    if (a == RPS.Moves.ROCK     && b == RPS.Moves.SCISSORS ||
+        a == RPS.Moves.PAPER    && b == RPS.Moves.ROCK ||
+        a == RPS.Moves.SCISSORS && b == RPS.Moves.PAPER) {
+        return 1;
+    } else {
+        return -1;
+    }
+};
+
+
+/*
+* Return the move that will defeat a particular move.
+*/
+RPS.trumps = function(move) {
+    switch (move) {
+        case RPS.Moves.ROCK:  return RPS.Moves.PAPER;
+        case RPS.Moves.PAPER: return RPS.Moves.SCISSORS;
+        default:              return RPS.Moves.ROCK;
+    }
+}
+
+
+
+/*
+* A Rock Paper Scissors Tournament.
+*
+* Each player will play every other player for a number of games. The score for
+* each player will be the sum total of wins - losses.
+*/
+RPS.Tourney = function() {
+    this.registrations = [];
+    this.results = null;
+    this.scores  = null;
+};
+
+
+/*
+* The number of games to play between two players.
+* Games are played between two instances of bots.
+* Sets re-create the bots, factoring for any random elements in the bot's
+* constructors.
+*/
+RPS.Tourney.GAMES = 100;
+RPS.Tourney.SETS  = 100;
+
+
+/*
+* Register a new player in the tournament.
+* param: player
+*   A player contructor that will be used to create a player that responds to 
+*   the "throwMove" and "addResult" messages.
+*
+*   throwMove: returns a RPS.Moves number value.
+*   addResult: accepts a result (1 for won, 0 for draw, -1 for loss)
+*                      and the opponent's move.
+*/
+RPS.Tourney.prototype.register = function(player) {
+    this.registrations.push(player);
+};
+
+
+/*
+* Play a tournament and return the results table.
+*/
+RPS.Tourney.prototype.run = function() {
+
+    /* Create the results array */
+    this.results = new Array(this.registrations.length)
+    this.scores  = new Array(this.registrations.length);
+
+    /* For each combination of players, play a match */
+    for(var a = 0; a < this.registrations.length; a++) {
+        var playerResults = new Array(this.registrations.length);
+        for(var b = a + 1; b < this.registrations.length; b++) {
+            for(var s = 0; s < RPS.Tourney.SETS; s++) {
+                /* Create players for match */
+                var playerA = new this.registrations[a];
+                var playerB = new this.registrations[b];
+
+                var result = this.match(playerA, playerB);
+
+                /* store running tally */
+                var score = 0;
+                for(var i = 0; i < result.length; score += result[i++].result);
+
+                /* Save match results */
+                playerResults[b] = (playerResults[b] || 0) + score;
+
+                this.scores[a] = (this.scores[a] || 0) + score;
+                this.scores[b] = (this.scores[b] || 0) - score;
+            }
+        }
+
+        /* Save an example set between players */
+        this.results[a] = playerResults;
+    }
+
+    return this.results;
+};
+
+
+/*
+* Play a single throw between two players.
+*/
+RPS.Tourney.prototype.game = function(a, b) {
+    /* Get the moves from both players */
+    var aMove = a.throwMove(),
+    bMove = b.throwMove();
+
+    var result = RPS.result(aMove, bMove);
+
+    a.addResult(result, bMove);
+    b.addResult(result * -1, aMove);
+
+    return { a: aMove, b: bMove, result: result };
+};
+
+
+/*
+* Play a match between two players and record the results.
+*/
+RPS.Tourney.prototype.match = function(a, b) {
+    var result = [];
+    for(var i = 0; i < RPS.Tourney.GAMES; i++) {
+        result.push(this.game(a, b));
+    }
+    return result;
+};
+
+
+/*
+* Write the results of the tourney a document.
+*/
+RPS.Tourney.prototype.write = function(element) {
+    // write table
+    var html = [];
+    html.push('<table>');
+    html.push('<thead>');
+    html.push('<tr>');
+    html.push('<td>vs</td>');
+    for (var j = 0; j < this.scores.length; j++) {
+        html.push('<th>');
+        html.push(this.registrations[j].NAME);
+        html.push('</th>');
+    }
+    html.push('</tr>');
+    html.push('</thead>');
+    html.push('<tbody>');
+    html.push('<tr>');
+    for (var i = 0; i < this.scores.length; i++) {
+        html.push('<tr>');
+        html.push('<th>');
+        html.push(this.registrations[i].NAME);
+        html.push('</th>');
+        for (var j = 0; j < this.scores.length; j++) {
+            html.push('<td>');
+            html.push(this.results[i][j] || -this.results[j][i] || '');
+            html.push('</td>');
+        }
+        html.push('<td>');
+        html.push(this.scores[i]);
+        html.push('</td>');
+        html.push('</tr>');
+    }
+    html.push('</tr>');
+    html.push('</tbody>');
+    html.push('</table>');
+
+    element.innerHTML = html.join('');
+};
+
+
+/* Create player namespace */
+RPS.Player = {}
+
+
+/*
+* Copycat
+* This player just copies the last move that their opponent played.
+*/
+RPS.Player.Copycat = function() {
+    this.lastOpponentMove = RPS.randomMove();
+};
+RPS.Player.Copycat.NAME = 'Copycat';
+
+RPS.Player.Copycat.prototype.throwMove = function() {
+    return this.lastOpponentMove;
+};
+
+RPS.Player.Copycat.prototype.addResult = function(result, opponentMove) {
+    this.lastOpponentMove = opponentMove;
+};
+
+
+
+/*
+* Rocky
+* This player plays randomy, but always throws rock instead of paper
+*/
+RPS.Player.Rocky = function() {
+    /* Don't care */
+};
+RPS.Player.Rocky.NAME = 'Rocky';
+
+RPS.Player.Rocky.prototype.throwMove = function() {
+    var move = RPS.randomMove()
+    if (move == RPS.Moves.PAPER) {
+        move = RPS.Moves.ROCK;
+    }
+
+    return move;
+};
+
+RPS.Player.Rocky.prototype.addResult = function(result, opponentMove) {
+    /* Don't care */
+};
+
+
+
+/*
+* Stubborn
+* This player chooses a cycle of play, and sticks to their strategy.
+*/
+RPS.Player.Stubborn = function() {
+    this.position = 0;
+    this.cycle = []
+    for(var i = 0; i < RPS.Player.Stubborn.CYCLE_LENGTH * 3; i++) {
+        this.cycle.push(i % 3 + 1);
+    }
+
+    for(var i = 0; i < this.cycle.length; i++) {
+        var p = parseInt(Math.random()*this.cycle.length);
+        var t = this.cycle[i];
+        this.cycle[i] = this.cycle[p];
+        this.cycle[p] = t;
+    }
+};
+RPS.Player.Stubborn.NAME = 'Stubborn';
+
+RPS.Player.Stubborn.CYCLE_LENGTH = 3;
+
+RPS.Player.Stubborn.prototype.throwMove = function() {
+    var move = this.cycle[this.position];
+
+    if (this.position ==  RPS.Player.Stubborn.CYCLE_LENGTH - 1) {
+        this.position = 0;
+        } else {
+        this.position++;
+    }
+
+    return move;
+};
+
+RPS.Player.Stubborn.prototype.addResult = function(result, opponentMove) {
+    /* Don't care */
+};
+
+
+/*
+ * Trumper
+ * A player that looks at the history of the other player and
+ * always choses whatever beats their most common move.
+ */
+RPS.Player.Trumper = function() {
+    this.counter = {};
+    this.counter[RPS.Moves.ROCK]     = 0;
+    this.counter[RPS.Moves.PAPER]    = 0;
+    this.counter[RPS.Moves.SCISSORS] = 0;
+};
+RPS.Player.Trumper.NAME = 'Trumper';
+
+RPS.Player.Trumper.prototype.throwMove = function() {
+    var mostThrown = RPS.Moves.ROCK;
+    if (this.counter[RPS.Moves.PAPER] > this.counter[RPS.Moves.ROCK])
+        mostThrown = RPS.Moves.PAPER;
+    if (this.counter[RPS.Moves.SCISSORS] > this.counter[RPS.Moves.PAPER])
+        mostThrown = RPS.Moves.SICSSORS;
+
+    return RPS.trumps(mostThrown);
+};
+
+RPS.Player.Trumper.prototype.addResult = function(result, opponentMove) {
+    this.counter[opponentMove] += 1;
+};
+
+
+/*
+ * Sensitive
+ * This player plays ROCK whenever they win, PAPER whenever they lose and,
+ * SCISSORS whenever there is a draw.
+ */
+RPS.Player.Sensitive = function() {
+    this.response = RPS.randomMove();
+};
+RPS.Player.Sensitive.NAME = 'Sensitive';
+
+RPS.Player.Sensitive.prototype.throwMove = function() {
+    return this.response;
+};
+
+RPS.Player.Sensitive.prototype.addResult = function(result, opponentMove) {
+    switch (result) {
+        case  1: this.response = RPS.Moves.ROCK; break;
+        case -1: this.response = RPS.Moves.PAPER; break;
+        default: this.response = RPS.Moves.SCISSORS;
+    }
+};
+
+
+/*
+ * Memorizer
+ * looks at the recent history, and matches it against what has happened in
+ * the past. Search as deeply as possible, and If there is a match then play
+ * the move that maximizes EV against the opponent's move distributin.
+ */
+RPS.Player.Memorizer = function() {
+    this.history = [];
+    this.index = {};
+}
+RPS.Player.Memorizer.NAME = 'Memorizer';
+RPS.Player.Memorizer.MEMORY = 50;
+
+
+/* Play a move that maximizes the expected value against a distribution */
+RPS.Player.Memorizer.prototype.maxEV = function(rocks, papers, scissors) {
+    var rockEV     = (-1 * papers)   + (1 * scissors),
+        paperEV    = (-1 * scissors) + (1 * rocks),
+        scissorsEV = (-1 * rocks)    + (1 * papers);
+
+    if (rockEV > paperEV && rockEV > scissorsEV) {
+        return RPS.Moves.ROCK;
+    } else if (paperEV > rockEV && paperEV > scissorsEV) {
+        return RPS.Moves.PAPER;
+    } else if (scissorsEV > rockEV && scissorsEV > paperEV){
+        return RPS.Moves.SCISSORS;
+    } else {
+        return RPS.randomMove();
+    }
+};
+
+
+RPS.Player.Memorizer.prototype.throwMove = function() {
+    /* walk path until we can't walk anymore */
+    var pointer  = this.index,
+        seek = 0;
+
+    while(this.history[seek] && pointer.path &&
+            pointer.path[this.history[seek]]) {
+        pointer = pointer.path[this.history[seek++]];
+    }
+
+    /* Use the count distribution */
+    var rocks    = (pointer[RPS.Moves.ROCK]     || { count: 0 }).count,
+        papers   = (pointer[RPS.Moves.PAPER]    || { count: 0 }).count,
+        scissors = (pointer[RPS.Moves.SCISSORS] || { count: 0 }).count;
+
+    return this.maxEV(rocks, papers, scissors);
+};
+
+
+RPS.Player.Memorizer.prototype.addResult = function(result, opponentMove) {
+    /* increment values in tri-tree */
+    var pointer = this.index;
+    var maxHistory = RPS.Player.Memorizer.MEMORY;
+
+    for (var i = 0; i < Math.min(this.history.length, maxHistory); i++) {
+        var move = this.history[i];
+
+        if (!pointer[move]) {
+            pointer[move] = {
+                count: 1,
+                path: {}
+            };
+        } else {
+            pointer[move].count++;
+        }
+
+        pointer = pointer[move].path;
+    }
+
+    this.history.unshift(opponentMove);
+};
+
+
+
+RPS.main = function(entrant) {
+    var tourney = new RPS.Tourney;
+    tourney.register(RPS.Player.Copycat);
+    tourney.register(RPS.Player.Rocky);
+    tourney.register(RPS.Player.Stubborn);
+    tourney.register(RPS.Player.Sensitive);
+    tourney.register(RPS.Player.Trumper);
+    tourney.register(RPS.Player.Memorizer);
+
+    if (entrant) {
+      tourney.register(entrant);
+    }
+
+    tourney.run();
+    tourney.write(document.getElementById('results'));
+};
+
+
+RPS.eval = function(code, className) {
+    // Get values from input
+    code = code || document.getElementById('code').value;
+    className = className || document.getElementById('className').value;
+
+    if (code && className) {
+        var entrant = eval(code + ';' + className + ';');
+        RPS.main(entrant);
+    } else {
+        alert('Provide your class definition and class name');
+    }
+};
+
+        </script>
+        <style>
+            * {
+                font-family: arial, sans-serif;
+            }
+            h1 {
+                font-size: 125%;
+                color: #8bac14;
+            }
+            h3 {
+                color: #0598e3;
+            }
+            body {
+                width: 1000px;
+            }
+            textarea {
+                font-family: monospace;
+                font-size: 12px;
+            }
+            div {
+                font-size: 12px;
+            }
+            td {
+                text-align: right;
+            }
+            div.description {
+                font-size: 12px;
+                width: 380px;
+                float: left;
+                margin-right: 20px;
+            }
+            div.test {
+            }
+            p.comment {
+                color: #8bac14;
+            }
+        </style>
+    </head>
+    <body>
+      <h1>Wishabi Rock Paper Scissors AI Tournament</h1>
+      <div id='results'></div>
+      <hr/>
+
+      <div class='description'>
+        <h2>Game</h2>
+        <p>
+        For more information on how the game works see:
+        <a href="http://en.wikipedia.org/wiki/Rock-paper-scissors">
+            Description (wikipedia)</a>.
+        </p>
+
+        <h2>Challenge</h2>
+        <p>
+        Create a Javascript class that implements a Rock Paper Scissors AI
+        that will perform well in a round-robin tournament against a set of
+        very simple bots by maximizing a total net score of wins - losses.
+        </p>
+        <p>
+        Matches between two bots consist of 100 sets which are 100 games long.
+        </p>
+        <p>
+        The bots must implement an interface that the tournament director
+        will invoke to receive the bot's moves.
+        <p>
+        The final tournament to test the quality of this AI, will be against
+        other unseen bots of similar complexity.
+        </p>
+        <p>
+        Read the source code of this page to see how the other simple bots and
+        tournament is implemented.
+        </p>
+
+        <h2>Interface</h2>
+        <p>The bot must implement this basic interface</p>
+        <h3>Constructor</h3>
+        <p>At the beginning of each set, a bot will be instantiated using this
+        constructor, which receives no parameters</p>
+        <h3>Name</h3>
+        <p>The bot's name is used to display the results</p>
+        <h3>throwMove()</h3>
+        <p class='comment'>Return: RPS.Move</p>
+        <p>Return the next move the bot throws.</p>
+        <h3>addResult(result, opponentMove)</h3>
+        <p class='comment'>Param <b>result</b>: The result of the last game 1
+        for win, 0 for tie, -1 for loss.</p>
+        <p class='comment'>Param <b>opponentMove</b>: The move the opponent
+        last threw.
+        </p>
+        <p>Receive from the tournament director the results of the last game.
+        </p>
+
+        <h2>Library</h2>
+        <p>There are a few simple helper functions and enums you can use.</p>
+
+        <h3>RPS.Moves</h3>
+        <p class='comment'>enum: ROCK: 1, PAPER: 2, SCISSORS: 3</p>
+        <p>The available moves.</p>
+
+        <h3>RPS.randomMove()</h3>
+        <p class='comment'>Returns: A random move.</p>
+        <p>Get a random move.</p>
+
+        <h3>RPS.result(a, b)</h3>
+        <p class='comment'>Param <b>a</b>: Player A's move</p>
+        <p class='comment'>Param <b>b</b>: Player B's move</p>
+        <p class='comment'>Return: if a or b won the game. 1 for a winning,
+        -2 for b winning and 0 for a tie.</p>
+        <p>Determine the result of a game.</p>
+
+        <h3>RPS.trumps(move)</h3>
+        <p class='comment'>Param <b>move</b>: The move to beat.</p>
+        <p class='comment'>Return: the RPS.Move that will beat the provided 
+        RPS.Move.</p>
+        <p>Find a move that trumps a provided move.</p>
+      </div>
+
+      <div class='test'>
+        <h2>Test</h2>
+        <p>
+        Use this test area to check the performance of your AI against
+        some simple bots.
+        </p>
+        <label for='code'>Class Definition</label><br/>
+        <textarea id='code' rows='20' cols='80'>
+/*
+* Paperboy
+* This player plays paper when ahead or after winning, but randomly otherwise.
+*/
+RPS.Player.Paperboy = function() {
+    this.score = 0;
+    this.lastResult = null;
+};
+RPS.Player.Paperboy.NAME = 'Paperboy';
+
+/*
+* Choose ROCK, PAPER, or SCISSORS.
+*/
+RPS.Player.Paperboy.prototype.throwMove = function() {
+    if (this.score >= 0 || this.lastResult == 1) {
+        return RPS.Moves.PAPER;
+    } else {
+        return RPS.randomMove();
+    }
+};
+
+/*
+* Receive the results of the last move.
+*/
+RPS.Player.Paperboy.prototype.addResult = function(result, opponentMove) {
+    this.lastResult = result;
+    this.score += result;
+};
+        </textarea><br/>
+        <label for='className'>Class Name</label>
+        <input id='className' type='text' length='20' 
+               value="RPS.Player.Paperboy"/>
+        <input type='submit' onclick='RPS.eval()'/><br/>
+
+        <h2>Submitting Code</h2>
+        <h3>Your RPS Bot</h3>
+        <p>
+        Create a new AI to compete in the tournement, that will do well against
+        not only the test sample provided, but likely other unseen competition.
+        </p>
+        <p>
+        Use comments to explain your strategy and implementation, and send the
+        javascript code.
+        </p>
+        <h3>Additional Questions</h3>
+        <p>
+        Please also submit code in response to these short code questions:
+        </p>
+        <style>
+            li { margin-bottom: 20px; }
+        </style>
+        <ul>
+            <li>
+            Write a function in the language of your choice that orders two
+            version strings. A version string contains a period- separated list
+            of numbers or strings.<br/>
+            For example, "1.3.0", "2.2.0.2" or "1.13.a".
+            </li>
+            <li>
+            Write 2 implementations of C's string copy routine, one with a loop
+            and the other using recursion. What is the security risk with this
+            routine?<br/>
+            The function should have the signature:<br/>
+            char* strcpy(char* destination, const char* source);
+            </li>
+        </ul>
+      </div>
+    </body>
+</html>
+
